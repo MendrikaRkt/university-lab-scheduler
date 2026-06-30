@@ -213,6 +213,51 @@ print(result.discrepancies)     # credit-vs-session gaps
 
 ---
 
+## Deployment
+
+The application is production-ready and ships with logging, a health check,
+input validation, rate limiting and ready-to-use deployment configuration. See
+[DEPLOYMENT.md](DEPLOYMENT.md) for the full step-by-step guide (Streamlit
+Community Cloud, Docker, and systemd) and [SECURITY.md](SECURITY.md) for the
+security model.
+
+### Quick start with Docker
+
+```bash
+cp .env.example .env            # adjust LOG_LEVEL, APP_PORT if needed
+docker compose up -d            # build and start on http://localhost:8501
+docker compose logs -f          # follow logs
+```
+
+### Quick start with the helper script
+
+```bash
+./scripts/deploy.sh docker      # build image and run the container
+./scripts/deploy.sh local       # run directly with a local virtual environment
+./scripts/deploy.sh logs        # tail container logs
+./scripts/deploy.sh stop        # stop and remove the container
+```
+
+### Streamlit Community Cloud
+
+Point a new Streamlit Cloud app at this repository with
+`presentation/app.py` as the entry point, set any secrets in the app's
+"Secrets" panel, and deploy. Details are in [DEPLOYMENT.md](DEPLOYMENT.md).
+
+### Production features
+
+- **Health check**: a "Health & status" page in the UI plus the native
+  `/_stcore/health` endpoint used by the Docker `HEALTHCHECK`.
+- **Logging**: leveled logging (INFO/WARNING/ERROR) to console and rotating
+  files under `logs/`, configured by `config/logging.yaml` and overridable with
+  `LOG_LEVEL`.
+- **Error handling**: domain errors are mapped to user-friendly messages.
+- **Security**: upload validation, filename sanitization, solver rate limiting,
+  XSRF/CORS protection and a non-root container.
+- **Performance**: caching utilities and progress indicators for long solves.
+
+---
+
 ## Tests
 
 ```bash

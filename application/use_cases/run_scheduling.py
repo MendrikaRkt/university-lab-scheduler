@@ -14,7 +14,11 @@ from application.services.scheduler_service import SchedulerService, SchedulingR
 from domain.entities.group import Group
 from domain.entities.professor import Professor
 from infrastructure.config.config_loader import AppSettings, get_settings
+from infrastructure.errors import SolverError
+from infrastructure.logging_config import get_logger
 from infrastructure.solver.solver_engine import CPSATSolver
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -33,7 +37,15 @@ class RunSchedulingUseCase:
                 tolerance: int = 0) -> SchedulingResult:
         if not groups:
             raise ValueError("No group to schedule.")
-        return self.service.schedule(groups, professors, tolerance)
+        logger.info("Executing scheduling: %d groups, %d professors",
+                    len(groups), len(professors))
+        try:
+            result = self.service.schedule(groups, professors, tolerance)
+        except Exception as exc:
+            logger.exception("Scheduling failed: %s", exc)
+            raise SolverError(str(exc)) from exc
+        logger.info("Scheduling completed: status=%s", result.status)
+        return result
 
     def export_excel(self, path: str, result: SchedulingResult,
                     groups: List[Group], professors: List[Professor]) -> str:

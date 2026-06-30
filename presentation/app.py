@@ -22,13 +22,24 @@ from domain.entities.group import Group  # noqa: E402
 from domain.entities.professor import Professor  # noqa: E402
 from domain.value_objects import TimeSlot  # noqa: E402
 from infrastructure.config.config_loader import get_settings  # noqa: E402
+from infrastructure.errors import friendly_message  # noqa: E402
+from infrastructure.logging_config import get_logger, setup_logging  # noqa: E402
+from infrastructure.security import RateLimiter  # noqa: E402
 from presentation.components.ui_helpers import wizard_stepper  # noqa: E402
 from presentation.pages import (  # noqa: E402
     config_page,
+    health_page,
     monitoring_dashboard,
     preview_sandbox,
     results_page,
 )
+
+# Configure logging once for the whole process.
+setup_logging()
+logger = get_logger("lab_scheduler.presentation")
+
+# Throttle expensive solver runs: at most 10 launches per minute per session.
+_SOLVER_RATE_LIMITER = RateLimiter(max_calls=10, period_seconds=60)
 
 st.set_page_config(page_title="Laboratory Scheduler - Loyola",
                 layout="wide")
@@ -93,12 +104,29 @@ def _wizard() -> None:
                 "In production, groups and credits are ingested from the Excel "
                 "files via infrastructure/excel.")
         if st.button("Run the solver", type="primary"):
-            with st.spinner("CP-SAT solving in progress..."):
+            if not _SOLVER_RATE_LIMITER.allow("solver"):
+                wait = int(_SOLVER_RATE_LIMITER.retry_after("solver")) + 1
+                st.warning(f"Too many runs. Please wait {wait}s and try again.")
+                return
+            progress = st.progress(0, text="Preparing inputs...")
+            try:
                 groups, profs = _demo_inputs()
+                progress.progress(35, text="CP-SAT solving in progress...")
+                logger.info("Starting scheduling run (%d groups)", len(groups))
                 uc = RunSchedulingUseCase()
                 st.session_state.result = uc.execute(groups, profs)
+                progress.progress(90, text="Building results...")
                 st.session_state.groups = groups
                 st.session_state.profs = profs
+                progress.progress(100, text="Done.")
+                logger.info("Scheduling run finished: status=%s",
+                            st.session_state.result.status)
+            except Exception as exc:
+                logger.exception("Scheduling run failed: %s", exc)
+                progress.empty()
+                st.error(friendly_message(exc))
+                return
+            progress.empty()
             st.session_state.step = 2
             st.rerun()
         if st.button("Back"):
@@ -121,6 +149,7 @@ _PAGES = {
     "Scheduling assistant": "wizard",
     "Monitoring dashboard": "monitoring",
     "Sandbox (dry-run)": "sandbox",
+    "Health & status": "health",
 }
 
 
@@ -142,6 +171,8 @@ def main() -> None:
         monitoring_dashboard.render()
     elif page == "sandbox":
         preview_sandbox.render()
+    elif page == "health":
+        health_page.render()
 
 
 if __name__ == "__main__":

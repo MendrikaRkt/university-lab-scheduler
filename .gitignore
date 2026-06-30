@@ -30,6 +30,13 @@ htmlcov/
 outputs/
 reports/
 data_clean/*.csv
+logs/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
 
 # Editors / OS
 .vscode/
